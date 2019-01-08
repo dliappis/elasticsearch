@@ -98,6 +98,7 @@ final class RemoteClusterConnection implements TransportConnectionListener, Clos
     private volatile String proxyAddress;
     private volatile List<Tuple<String, Supplier<DiscoveryNode>>> seedNodes;
     private volatile boolean skipUnavailable;
+    private volatile boolean transportCompress;
     private final ConnectHandler connectHandler;
     private final TimeValue initialConnectionTimeout;
     private SetOnce<ClusterName> remoteClusterName = new SetOnce<>();
@@ -132,6 +133,7 @@ final class RemoteClusterConnection implements TransportConnectionListener, Clos
         this.seedNodes = Collections.unmodifiableList(seedNodes);
         this.skipUnavailable = RemoteClusterService.REMOTE_CLUSTER_SKIP_UNAVAILABLE
             .getConcreteSettingForNamespace(clusterAlias).get(settings);
+        this.transportCompress = connectionManager.getConnectionProfile().getCompressionEnabled();
         this.connectHandler = new ConnectHandler();
         this.threadPool = transportService.threadPool;
         connectionManager.addListener(this);
@@ -682,7 +684,9 @@ final class RemoteClusterConnection implements TransportConnectionListener, Clos
                 maxNumRemoteConnections,
                 connectedNodes.size(),
                 initialConnectionTimeout,
-                skipUnavailable);
+                skipUnavailable,
+                transportCompress
+            );
     }
 
     int getNumNodesConnected() {
