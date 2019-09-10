@@ -89,6 +89,10 @@ LABEL org.label-schema.build-date="${build_date}" \
   org.opencontainers.image.vendor="Elastic" \
   org.opencontainers.image.version="${version}"
 
+# OpenShift doesn't allow running with USER 0 even if the entrypoint switches to another user later on
+# https://github.com/elastic/elasticsearch/issues/46166
+USER 1000
+
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 # Dummy overridable parameter parsed by entrypoint
 CMD ["eswrapper"]

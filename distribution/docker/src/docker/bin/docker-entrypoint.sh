@@ -4,24 +4,11 @@ set -e
 # Files created by Elasticsearch should always be group writable too
 umask 0002
 
-run_as_other_user_if_needed() {
-  if [[ "$(id -u)" == "0" ]]; then
-    # If running as root, drop to specified UID and run command
-    exec chroot --userspec=1000 / "${@}"
-  else
-    # Either we are running in Openshift with random uid and are a member of the root group
-    # or with a custom --user
-    exec "${@}"
-  fi
-}
-
 # Allow user specify custom CMD, maybe bin/elasticsearch itself
 # for example to directly specify `-E` style parameters for elasticsearch on k8s
 # or simply to run /bin/bash to check the image
 if [[ "$1" != "eswrapper" ]]; then
-  if [[ "$(id -u)" == "0" && $(basename "$1") == "elasticsearch" ]]; then
-    # centos:7 chroot doesn't have the `--skip-chdir` option and
-    # changes our CWD.
+  if [[ $(basename "$1") == "elasticsearch" ]]; then
     # Rewrite CMD args to replace $1 with `elasticsearch` explicitly,
     # so that we are backwards compatible with the docs
     # from the previous Elasticsearch versions<6
@@ -31,9 +18,9 @@ if [[ "$1" != "eswrapper" ]]; then
     # `bin/elasticsearch -E x.y=z` would not work.
     set -- "elasticsearch" "${@:2}"
     # Use chroot to switch to UID 1000
-    exec chroot --userspec=1000 / "$@"
+    exec "$@"
   else
-    # User probably wants to run something else, like /bin/bash, with another uid forced (Openshift?)
+    # User probably wants to run something else, like /bin/bash
     exec "$@"
   fi
 fi
@@ -83,18 +70,11 @@ if [[ -f bin/elasticsearch-users ]]; then
   # enabled, but we have no way of knowing which node we are yet. We'll just
   # honor the variable if it's present.
   if [[ -n "$ELASTIC_PASSWORD" ]]; then
-    [[ -f /usr/share/elasticsearch/config/elasticsearch.keystore ]] || (run_as_other_user_if_needed elasticsearch-keystore create)
-    if ! (run_as_other_user_if_needed elasticsearch-keystore list | grep -q '^bootstrap.password$'); then
-      (run_as_other_user_if_needed echo "$ELASTIC_PASSWORD" | elasticsearch-keystore add -x 'bootstrap.password')
+    [[ -f /usr/share/elasticsearch/config/elasticsearch.keystore ]] || (elasticsearch-keystore create)
+    if ! (elasticsearch-keystore list | grep -q '^bootstrap.password$'); then
+      (echo "$ELASTIC_PASSWORD" | elasticsearch-keystore add -x 'bootstrap.password')
     fi
   fi
 fi
 
-if [[ "$(id -u)" == "0" ]]; then
-  # If requested and running as root, mutate the ownership of bind-mounts
-  if [[ -n "$TAKE_FILE_OWNERSHIP" ]]; then
-    chown -R 1000:0 /usr/share/elasticsearch/{data,logs}
-  fi
-fi
-
-run_as_other_user_if_needed /usr/share/elasticsearch/bin/elasticsearch "${es_opts[@]}"
+exec bin/elasticsearch "${es_opts[@]}"
